@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>SAPP 8.0 PRO</title>
+    <style>
+        :root { --bg: #121212; --card: #1e1e1e; --blue: #00aaff; --green: #28a745; --red: #dc3545; --orange: #fd7e14; }
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', sans-serif; }
+        body { background-color: var(--bg); color: white; height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
+
+        header { padding: 15px; border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center; }
+        #activeClient { color: var(--blue); font-weight: bold; font-size: 18px; }
+
+        main { flex: 1; padding: 15px; display: flex; flex-direction: column; overflow-y: auto; }
+        
+        /* Das Haupt-Textfeld für das Diktat */
+        #inputArea { 
+            width: 100%; min-height: 150px; background: #181818; color: white; border: 1px solid var(--blue); 
+            border-radius: 12px; padding: 15px; font-size: 16px; margin-bottom: 15px; resize: none;
+            box-shadow: 0 0 10px rgba(0, 170, 255, 0.1);
+        }
+
+        .btn-main { width: 100%; padding: 16px; border-radius: 12px; border: none; color: white; font-weight: bold; font-size: 16px; cursor: pointer; text-transform: uppercase; margin-bottom: 20px; }
+        .btn-green { background: var(--green); }
+        
+        /* Verlauf-Sektion */
+        .history-label { font-size: 10px; color: #555; text-transform: uppercase; margin-bottom: 10px; letter-spacing: 1px; }
+        .entry-card { background: var(--card); border-radius: 10px; padding: 12px; margin-bottom: 10px; border-left: 4px solid var(--blue); }
+        .entry-header { display: flex; justify-content: space-between; font-size: 11px; color: var(--orange); margin-bottom: 5px; }
+
+        nav { height: 70px; display: flex; justify-content: space-around; align-items: center; background: #000; border-top: 1px solid #333; padding-bottom: env(safe-area-inset-bottom); }
+        .nav-item { background: none; border: none; color: #666; font-size: 10px; font-weight: bold; text-align: center; }
+
+        /* Dialoge */
+        .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 1000; justify-content: center; align-items: center; padding: 20px; }
+        .modal-content { background: var(--card); border-radius: 20px; padding: 25px; width: 100%; max-width: 380px; border: 1px solid #333; }
+        select, input { width: 100%; padding: 14px; margin: 10px 0; border-radius: 10px; background: #000; color: white; border: 1px solid #444; font-size: 16px; }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div id="activeClient">WÄHLE KLIENT</div>
+        <button onclick="openModal('klienten')" style="background:#333; color:white; border:none; padding:5px 12px; border-radius:5px; font-size:10px;">LISTE</button>
+    </header>
+
+    <main>
+        <textarea id="inputArea" placeholder="Tippe hier, nutze das Mikrofon deiner Tastatur für endloses Diktieren..."></textarea>
+        
+        <button class="btn-main btn-green" onclick="triggerSave()">✓ Eintrags-Details & Speichern</button>
+
+        <div class="history-label">Letzte 5 Berichte</div>
+        <div id="historyBox"></div>
+    </main>
+
+    <nav>
+        <button class="nav-item" onclick="openModal('neu')">➕ NEU</button>
+        <button class="nav-item" onclick="exportToDrive()" style="color:var(--blue)">💾 DRIVE EXPORT</button>
+        <button class="nav-item" onclick="loescheKlient()" style="color:var(--red)">🗑️ LÖSCHEN</button>
+    </nav>
+
+    <div id="modalDetails" class="modal">
+        <div class="modal-content">
+            <h3 style="color:var(--blue); text-align:center;">DETAILS ERFASSEN</h3>
+            <p style="font-size:12px; color:#888; margin-top:15px;">ART:</p>
+            <select id="selArt">
+                <option value="Aufs.">Aufsuchend</option>
+                <option value="Begl.">Begleitend</option>
+                <option value="Büro">Büro / Telefon</option>
+                <option value="Doku">Dokumentation</option>
+            </select>
+            <p style="font-size:12px; color:#888;">DAUER:</p>
+            <select id="selDauer">
+                <option value="0.25">0.25h</option><option value="0.50">0.50h</option>
+                <option value="0.75">0.75h</option><option value="1.00">1.00h</option>
+                <option value="1.50">1.50h</option><option value="2.00">2.00h</option>
+            </select>
+            <button class="btn-main btn-green" style="margin-top:20px;" onclick="finalSave()">SPEICHERN</button>
+            <button onclick="closeModals()" style="width:100%; background:none; border:none; color:#666; font-size:12px;">ABBRECHEN</button>
+        </div>
+    </div>
+
+    <div id="modalKlienten" class="modal"><div class="modal-content"><h3>KLIENTEN</h3><div id="kList" style="margin:15px 0;"></div><button onclick="closeModals()" class="btn-main" style="background:#333">ZURÜCK</button></div></div>
+
+    <div id="modalNeu" class="modal"><div class="modal-content"><h3>NEUER KLIENT</h3><input type="text" id="kInput" placeholder="Name..."><button class="btn-main btn-green" onclick="addClient()">ANLEGEN</button></div></div>
+
+    <script>
+        let db = JSON.parse(localStorage.getItem('sapp_80_db')) || { clients: {}, active: null };
+
+        function triggerSave() {
+            const txt = document.getElementById('inputArea').value;
+            if(!db.active) return alert("Wähle erst einen Klienten!");
+            if(txt.trim().length < 3) return alert("Bitte erst Text diktieren!");
+            openModal('details');
+        }
+
+        function finalSave() {
+            const txt = document.getElementById('inputArea').value;
+            const entry = {
+                ts: new Date().toLocaleString('de-DE', {day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'}),
+                art: document.getElementById('selArt').value,
+                dur: document.getElementById('selDauer').value,
+                txt: polieren(txt)
+            };
+            if(!db.clients[db.active]) db.clients[db.active] = [];
+            db.clients[db.active].unshift(entry);
+            saveDB();
+            document.getElementById('inputArea').value = "";
+            closeModals();
+            render();
+        }
+
+        function polieren(t) {
+            t = t.trim().replace(/\s+punkt\b/gi, ".").replace(/\s+komma\b/gi, ",").replace(/\s+fragezeichen\b/gi, "?");
+            return t.charAt(0).toUpperCase() + t.slice(1);
+        }
+
+        function exportToDrive() {
+            if(!db.active || !db.clients[db.active].length) return alert("Keine Daten!");
+            let out = `SAPP BERICH: ${db.active}\n${'='.repeat(20)}\n\n`;
+            db.clients[db.active].forEach(e => {
+                out += `[${e.ts}] | ${e.art} | ${e.dur}h\n${e.txt}\n${'-'.repeat(20)}\n`;
+            });
+            const file = new File([out], `SAPP_${db.active.replace(/ /g,'_')}.txt`, {type:'text/plain'});
+            if(navigator.share) navigator.share({files:[file], title:'SAPP Export'});
+            else { const a=document.createElement('a'); a.href=URL.createObjectURL(file); a.download=file.name; a.click(); }
+        }
+
+        // UI & LOGIK
+        function saveDB() { localStorage.setItem('sapp_80_db', JSON.stringify(db)); }
+        function openModal(id) { 
+            closeModals(); 
+            if(id === 'klienten') {
+                const l = document.getElementById('kList'); l.innerHTML = "";
+                Object.keys(db.clients).forEach(n => {
+                    const d = document.createElement('div'); d.style = "padding:15px; border-bottom:1px solid #333; font-weight:bold;";
+                    d.innerText = n; d.onclick = () => { db.active = n; saveDB(); render(); closeModals(); };
+                    l.appendChild(d);
+                });
+            }
+            document.getElementById('modal' + id.charAt(0).toUpperCase() + id.slice(1)).style.display = 'flex'; 
+        }
+        function closeModals() { document.querySelectorAll('.modal').forEach(m => m.style.display = 'none'); }
+        function addClient() { const n = document.getElementById('kInput').value; if(n) { db.clients[n] = []; db.active = n; saveDB(); render(); closeModals(); } }
+        function loescheKlient() { if(confirm("Löschen?")) { delete db.clients[db.active]; db.active = null; saveDB(); render(); } }
+
+        function render() {
+            const box = document.getElementById('historyBox');
+            const disp = document.getElementById('activeClient');
+            box.innerHTML = "";
+            if(!db.active) return;
+            disp.innerText = db.active.toUpperCase();
+            (db.clients[db.active] || []).slice(0, 5).forEach(e => {
+                box.innerHTML += `<div class="entry-card"><div class="entry-header"><span>${e.ts}</span><span>${e.art} | ${e.dur}h</span></div><div style="font-size:14px;">${e.txt}</div></div>`;
+            });
+        }
+        render();
+    </script>
+</body>
+</html>
