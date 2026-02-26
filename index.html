@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>SAPP - Web Edition 1.1</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Roboto, sans-serif; }
+        
+        body {
+            background: linear-gradient(135deg, #1A1B26 0%, #09090B 100%);
+            color: #ffffff;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        header {
+            padding: 20px; font-size: 24px; font-weight: bold; color: #00E5FF;
+            text-shadow: 0px 0px 10px rgba(0, 229, 255, 0.3);
+        }
+
+        .transcript-container {
+            flex: 1; padding: 0 20px; display: flex; flex-direction: column;
+        }
+
+        #txtLiveTranskript {
+            flex: 1; background: #242533; border: none; border-radius: 15px;
+            color: #F0F0F0; font-size: 16px; padding: 20px; resize: none; outline: none;
+            box-shadow: 0px 10px 30px rgba(0, 0, 0, 0.5); line-height: 1.5;
+        }
+
+        .action-zone {
+            padding: 20px; display: flex; flex-direction: column; align-items: center; gap: 15px;
+        }
+
+        #btnSelectKlient {
+            background: #2E7D32; color: white; border: none; padding: 15px 30px;
+            border-radius: 30px; font-size: 16px; font-weight: bold; width: 90%;
+            box-shadow: 0px 5px 15px rgba(46, 125, 50, 0.4); cursor: pointer;
+        }
+
+        #btnMic {
+            background: #2196F3; color: white; border: none; width: 80px; height: 80px;
+            border-radius: 50%; font-size: 30px; box-shadow: 0px 10px 25px rgba(33, 150, 243, 0.5);
+            cursor: pointer; display: flex; justify-content: center; align-items: center; transition: 0.3s;
+        }
+        #btnMic.recording {
+            background: #E53935; box-shadow: 0px 10px 25px rgba(229, 57, 53, 0.6);
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(229, 57, 53, 0.7); }
+            70% { transform: scale(1.1); box-shadow: 0 0 0 15px rgba(229, 57, 53, 0); }
+            100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(229, 57, 53, 0); }
+        }
+
+        #txtStatus { color: #787B8A; font-size: 14px; font-weight: bold; }
+
+        .dock {
+            background: #1E1F2B; margin: 0 20px 20px 20px; padding: 15px;
+            border-radius: 20px; box-shadow: 0px 10px 30px rgba(0, 0, 0, 0.6);
+            display: flex; justify-content: space-between;
+        }
+        .dock-btn { background: transparent; border: none; color: #A0A3B5; font-size: 24px; cursor: pointer; padding: 10px; }
+        .dock-btn:hover { color: #00E5FF; }
+
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8); z-index: 1000;
+            display: none; justify-content: center; align-items: center;
+        }
+        .modal-box {
+            background: #242533; padding: 25px; border-radius: 15px; width: 85%; max-width: 400px;
+            display: none; flex-direction: column; gap: 15px; box-shadow: 0px 10px 30px rgba(0,0,0,0.7);
+        }
+        .modal-box h3 { color: #00E5FF; text-align: center; margin-bottom: 5px; }
+        .modal-box select, .modal-box input {
+            padding: 12px; border-radius: 8px; border: none; background: #1A1B26; color: white; font-size: 16px;
+        }
+        .btn-save { background: #2E7D32; color: white; border: none; padding: 15px; border-radius: 8px; font-weight: bold; cursor: pointer; margin-top: 10px;}
+        .btn-cancel { background: #D32F2F; color: white; border: none; padding: 15px; border-radius: 8px; font-weight: bold; cursor: pointer; }
+        .klient-btn { background: #1976D2; color: white; border: none; padding: 15px; border-radius: 8px; margin-bottom: 10px; font-weight: bold; width: 100%; cursor: pointer;}
+    </style>
+</head>
+<body>
+
+    <header>SAPP</header>
+
+    <div class="transcript-container">
+        <textarea id="txtLiveTranskript" placeholder="Die Akte ist leer. Wähle zuerst einen Klienten." readonly></textarea>
+    </div>
+
+    <div class="action-zone">
+        <button id="btnSelectKlient" onclick="KlientWaehlenDialog()">KLIENT WÄHLEN</button>
+        <button id="btnMic"><i class="fas fa-microphone"></i></button>
+        <div id="txtStatus">BEREIT FÜR EINGABE</div>
+    </div>
+
+    <div class="dock">
+        <button class="dock-btn" onclick="TextPolieren()" title="Polieren"><i class="fas fa-magic"></i></button>
+        <button class="dock-btn" onclick="TextUndoPolieren()" title="Undo"><i class="fas fa-undo"></i></button>
+        <button class="dock-btn" onclick="KlientHinzufuegen()" title="Neu"><i class="fas fa-plus"></i></button>
+        <button class="dock-btn" onclick="KlientLoeschen()" title="Löschen"><i class="fas fa-trash"></i></button>
+    </div>
+
+    <div id="modalOverlay" class="modal-overlay">
+        
+        <div id="dialogKlienten" class="modal-box">
+            <h3>AKTE ÖFFNEN</h3>
+            <div id="klientenListe" style="max-height: 250px; overflow-y: auto;"></div>
+            <button class="btn-cancel" onclick="SchliesseModals()">Abbrechen</button>
+        </div>
+
+        <div id="dialogSpeichern" class="modal-box">
+            <h3>EINTRAG SPEICHERN</h3>
+            <label>Maßnahme:</label>
+            <select id="spinArt">
+                <option>Aufsuchend</option>
+                <option>Begleitend</option>
+                <option>Büro</option>
+            </select>
+            <label>Dauer in Std:</label>
+            <select id="spinDauer">
+                <option>0.5</option><option>1.0</option><option>1.5</option>
+                <option>2.0</option><option>2.5</option><option>3.0</option>
+                <option>3.5</option><option>4.0</option><option>4.5</option><option>5.0</option>
+            </select>
+            <button class="btn-save" onclick="FinalSpeichern()">AKTE AKTUALISIEREN</button>
+            <button class="btn-cancel" onclick="Verwerfen()">Diktat verwerfen</button>
+        </div>
+    </div>
+
+    <script>
+        const btnMic = document.getElementById('btnMic');
+        const txtStatus = document.getElementById('txtStatus');
+        const txtLiveTranskript = document.getElementById('txtLiveTranskript');
+        
+        let klientenArray = JSON.parse(localStorage.getItem('sapp_klienten')) || [];
+        let gewaehlterKlient = "KLIENT WÄHLEN";
+        let historyText = ""; 
+        let liveText = "";    
+        let letzterText = ""; 
+        let isListening = false;
+
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        let recognition;
+        
+        if (SpeechRecognition) {
+            recognition = new SpeechRecognition();
+            recognition.continuous = true; 
+            recognition.interimResults = true; 
+            recognition.lang = 'de-DE';
+
+            recognition.onstart = function() {
+                isListening = true;
+                btnMic.classList.add("recording");
+                txtStatus.innerText = "SAPP HÖRT ZU... (Sprich jetzt)";
+            };
+
+            recognition.onresult = function(event) {
+                let interim = "";
+                liveText = ""; 
+                for (let i = event.resultIndex; i < event.results.length; ++i) {
+                    if (event.results[i].isFinal) liveText += event.results[i][0].transcript;
+                    else interim += event.results[i][0].transcript;
+                }
+                txtLiveTranskript.value = historyText + (historyText ? "\n\n" : "") + "--- FRISCHES DIKTAT ---\n" + liveText + interim;
+            };
+
+            recognition.onerror = function(event) { console.log(event.error); };
+
+            recognition.onend = function() {
+                if(isListening) { try { recognition.start(); } catch(e){} }
+            };
+        }
+
+        btnMic.addEventListener('click', () => {
+            if(!SpeechRecognition) return alert("Browser wird nicht unterstützt!");
+            
+            if (gewaehlterKlient === "KLIENT WÄHLEN") {
+                alert("DATENSCHUTZ: Bitte wähle oder erstelle zuerst einen Klienten, um die Akte zuzuordnen!");
+                return;
+            }
+
+            if (isListening) {
+                isListening = false;
+                recognition.stop();
+                btnMic.classList.remove("recording");
+                txtStatus.innerText = "VERARBEITE...";
+                
+                if(liveText.trim() !== "") {
+                    setTimeout(() => {
+                        document.getElementById('modalOverlay').style.display = 'flex';
+                        document.getElementById('dialogSpeichern').style.display = 'flex';
+                    }, 500);
+                } else {
+                    txtStatus.innerText = "BEREIT FÜR EINGABE";
+                    txtLiveTranskript.value = historyText;
+                }
+            } else {
+                liveText = "";
+                recognition.start();
+            }
+        });
+
+        function KlientHinzufuegen() {
+            let name = prompt("NEUER KLIENT\nAus Datenschutzgründen bitte NUR den Vornamen eingeben:");
+            if (name && name.trim() !== "") {
+                name = name.trim();
+                if(!klientenArray.includes(name)) {
+                    klientenArray.push(name);
+                    localStorage.setItem('sapp_klienten', JSON.stringify(klientenArray));
+                    alert("Klient '" + name + "' sicher im lokalen Tresor angelegt!");
+                    KlientSetzen(name);
+                } else {
+                    alert("Dieser Vorname existiert bereits in deiner Liste.");
+                }
+            }
+        }
+
+        function KlientWaehlenDialog() {
+            if (klientenArray.length === 0) return alert("Die Liste ist leer. Lege zuerst über das PLUS-Symbol (➕) unten einen Klienten an.");
+            
+            let liste = document.getElementById('klientenListe');
+            liste.innerHTML = "";
+            klientenArray.forEach(klient => {
+                let btn = document.createElement('button');
+                btn.className = 'klient-btn';
+                btn.innerText = klient;
+                btn.onclick = () => { KlientSetzen(klient); SchliesseModals(); };
+                liste.appendChild(btn);
+            });
+
+            document.getElementById('modalOverlay').style.display = 'flex';
+            document.getElementById('dialogKlienten').style.display = 'flex';
+        }
+
+        function KlientSetzen(name) {
+            gewaehlterKlient = name;
+            document.getElementById('btnSelectKlient').innerText = "AKTE: " + name.toUpperCase();
+            KlientHistorieLaden();
+        }
+
+        function KlientLoeschen() {
+            if (gewaehlterKlient === "KLIENT WÄHLEN") return alert("Wähle zuerst die Akte aus, die du löschen willst.");
+            if (confirm("Möchtest du die Akte von '" + gewaehlterKlient + "' samt aller Daten RESTLOS und dauerhaft von deinem Gerät löschen?")) {
+                klientenArray = klientenArray.filter(k => k !== gewaehlterKlient);
+                localStorage.setItem('sapp_klienten', JSON.stringify(klientenArray));
+                localStorage.removeItem('sapp_texte_' + gewaehlterKlient);
+                
+                gewaehlterKlient = "KLIENT WÄHLEN";
+                document.getElementById('btnSelectKlient').innerText = gewaehlterKlient;
+                txtLiveTranskript.value = "Akte sicher gelöscht.";
+                historyText = "";
+                alert("Daten wurden restlos vernichtet.");
+            }
+        }
+
+        function KlientHistorieLaden() {
+            historyText = localStorage.getItem('sapp_texte_' + gewaehlterKlient) || "";
+            txtLiveTranskript.value = historyText;
+        }
+
+        function FinalSpeichern() {
+            let art = document.getElementById('spinArt').value;
+            let dauer = document.getElementById('spinDauer').value;
+            
+            let j = new Date();
+            let datum = j.toLocaleDateString('de-DE');
+            let zeit = j.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+            
+            let eintrag = datum + ", " + zeit + " Uhr | " + art + " | " + dauer + " Std.\n" + liveText.trim() + "\n\n";
+            
+            letzterText = historyText; 
+            historyText = eintrag + historyText; 
+            
+            localStorage.setItem('sapp_texte_' + gewaehlterKlient, historyText);
+            
+            SchliesseModals();
+            txtLiveTranskript.value = historyText;
+            txtStatus.innerText = "BEREIT FÜR EINGABE";
+            liveText = ""; 
+        }
+
+        function Verwerfen() {
+            SchliesseModals();
+            txtLiveTranskript.value = historyText;
+            txtStatus.innerText = "BEREIT FÜR EINGABE";
+            liveText = "";
+        }
+
+        function SchliesseModals() {
+            document.getElementById('modalOverlay').style.display = 'none';
+            document.getElementById('dialogKlienten').style.display = 'none';
+            document.getElementById('dialogSpeichern').style.display = 'none';
+        }
+
+        function TextPolieren() {
+            if(gewaehlterKlient === "KLIENT WÄHLEN") return;
+            let t = historyText;
+            if(!t) return;
+            
+            letzterText = t; 
+            
+            t = t.replace(/[ \t]+punkt\b/gi, ".");
+            t = t.replace(/[ \t]+komma\b/gi, ",");
+            t = t.replace(/[ \t]+fragezeichen\b/gi, "?");
+            t = t.replace(/\b(ähm|äh)\b/gi, "");
+            t = t.replace(/[ \t]+([.,!?])/g, "$1");
+            t = t.replace(/[ \t]{2,}/g, " "); 
+            t = t.replace(/([.!?]\s+)([a-zäöü])/g, function(m, p1, p2) { return p1 + p2.toUpperCase(); });
+            
+            historyText = t.trim();
+            localStorage.setItem('sapp_texte_' + gewaehlterKlient, historyText);
+            txtLiveTranskript.value = historyText;
+            alert("🪄 Akte sauber poliert!");
+        }
+
+        function TextUndoPolieren() {
+            if(gewaehlterKlient === "KLIENT WÄHLEN") return;
+            if (letzterText) { 
+                historyText = letzterText;
+                localStorage.setItem('sapp_texte_' + gewaehlterKlient, historyText);
+                txtLiveTranskript.value = historyText;
+                letzterText = ""; 
+                alert("Rückgängig gemacht!");
+            } else {
+                alert("Kein Undo verfügbar.");
+            }
+        }
+    </script>
+</body>
+</html>
